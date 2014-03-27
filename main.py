@@ -16,41 +16,71 @@
 #
 import webapp2
 from google.appengine.api import mail
+from google.appengine.api import users
 from google.appengine.ext.webapp.mail_handlers import InboundMailHandler
 import logging
+from google.appengine.ext import db
+import chandler
 
 class MainHandler(webapp2.RequestHandler):
-    def get(self):
+  def get(self):
+    self.redirect(users.create_login_url('/web/basic'))
 
-        message = mail.EmailMessage(sender="a@easymtask.appspotmail.com",
-                                            subject="Your account has been approved")
-        
-        message.to = "test@example.com"
-
-        message.html = """
-        <html><head></head><body>
-        Dear Albert:
-
-        Your example.com account has been approved.  You can now visit
-        http://www.example.com/ and sign in using your Google Account to
-        access new features.
-
-        Please let us know if you have any questions.
-
-        The example.com Team
-        </body></html>
-        """
-
-        message.send()
-        #self.response.write('Hello world!')
-
-class ReceiveMailHandler(InboundMailHandler):
+class MailHandler(InboundMailHandler):
   def receive(self, mail):
+    # WIP
     bodies = mail.bodies("text/plain")
-    for content_type, body in bodies:
-        logging.info(body.decode())
+    bodies[0].decode()
+
+    result = chandler.CommonHandler(False, None, None, None).get_response()
+    mail.send_mail(
+      sender = result.sender,
+      to="",
+      subject = result.subject,
+      body = result.body
+    )
+
+class HTTPHandler(webapp2.RequestHandler):
+  def get(self):
+    if users.is_current_user_admin():
+      if self.request.path[5:] == "":
+        self.redirect("/web/basic")
+      else:
+        self.response.write("""
+          <form method="post">
+            <p><input name="s" type="input" /></p>
+            <p><textarea name="b" rows="10"></textarea></p>
+            <p><input type="submit" value="Submit" /></p>
+          </form>
+        """)
+    else:
+      self.response.write("This action is administrator only")
+  def post(self):
+    if users.is_current_user_admin():
+        if self.request.path[5:] == "":
+          self.redirect("/web/basic")
+        else:
+          self.response.write(chandler.CommonHandler(True, self.request.path[5:], self.request.get("s"), self.request.get("b")).get_response()["body"]) # trim "/web/"
+    else:
+      self.response.write("This action is administrator only")
+
+class AdminHandler(webapp2.RequestHandler):
+  def get(self):
+    self.response.write("AdminHandler")
+
+class Task(db.Model):
+  title = db.StringProperty()
+  description = db.TextProperty()
+  added = db.DateTimeProperty(auto_now_add=True)
+  limit = db.DateTimeProperty()
+  active = db.BooleanProperty()
+
+class Address(db.Model):
+  address = db.EmailProperty()
 
 app = webapp2.WSGIApplication([
-    (ReceiveMailHandler.mapping()),
-    ('/', MainHandler)
+    (MailHandler.mapping()),
+    ('/', MainHandler),
+    ('/web/.*', HTTPHandler),
+    ('/admin', AdminHandler)
 ], debug=True)
