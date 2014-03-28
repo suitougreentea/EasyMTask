@@ -21,24 +21,33 @@ from google.appengine.ext.webapp.mail_handlers import InboundMailHandler
 import logging
 from google.appengine.ext import db
 import chandler
+import model
 
 class MainHandler(webapp2.RequestHandler):
   def get(self):
     self.redirect(users.create_login_url('/web/basic'))
 
 class MailHandler(InboundMailHandler):
-  def receive(self, mail):
-    # WIP
-    bodies = mail.bodies("text/plain")
-    bodies[0].decode()
+  def receive(self, message):
+    logging.info(message.sender)
+    q = model.Address.gql("WHERE address = :1", message.sender)
+    if q.count() > 0:
+      bodies = message.bodies("text/plain")
+      text = ""
+      for content_type, body in bodies:
+        text = body.decode()
+        break
+      subject = ""
+      if hasattr(message, "subject"):
+        subject = message.subject
+      result = chandler.CommonHandler(False, message.to[:-26], subject.strip(), text.strip()).get_response() # Trim @easymtask.appspotmail.com
 
-    result = chandler.CommonHandler(False, None, None, None).get_response()
-    mail.send_mail(
-      sender = result.sender,
-      to="",
-      subject = result.subject,
-      body = result.body
-    )
+      mail.EmailMessage (
+        sender = result["sender"] + "@easymtask.appspotmail.com",
+        to = message.sender,
+        subject = result["subject"],
+        html = result["body"]
+      ).send()
 
 class HTTPHandler(webapp2.RequestHandler):
   def get(self):
@@ -60,23 +69,49 @@ class HTTPHandler(webapp2.RequestHandler):
         if self.request.path[5:] == "":
           self.redirect("/web/basic")
         else:
-          self.response.write(chandler.CommonHandler(True, self.request.path[5:], self.request.get("s"), self.request.get("b")).get_response()["body"]) # trim "/web/"
+          self.response.write(chandler.CommonHandler(True, self.request.path[5:], self.request.get("s").strip(), self.request.get("b").strip()).get_response()["body"]) # trim "/web/"
     else:
       self.response.write("This action is administrator only")
 
 class AdminHandler(webapp2.RequestHandler):
   def get(self):
-    self.response.write("AdminHandler")
+    if users.is_current_user_admin():
+      self.response.write("""
+        <form method="post">
+          <p><input type="radio" name="method" value="add" checked>Add
+          <input type="radio" name="method" value="remove">Remove</p>
+          <p>Address: <input name="address" type="input" /></p>
+          <p><input type="submit" value="Submit" /></p>
+        </form>
+      """)
+    else:
+      self.response.write("This action is administrator only")
+  def post(self):
+    if users.is_current_user_admin():
+      method = self.request.get("method")
+      address = self.request.get("address")
+      if address == "":
+        self.error(400)
+        self.response.write("Bad Request")
+      else:
+        if method == "add":
+          q = model.Address.gql("WHERE address = :1", address)
+          if q.count() == 0:
+            model.Address(address=address).put()
+            self.response.write("Completed")
+          else:
+            self.response.write("Already registered")
+        elif method == "remove":
+          q = model.Address.gql("WHERE address = :1", address)
+          for c in q:
+            c.delete()
+          self.response.write("Completed")
+        else:
+          self.error(400)
+          self.response.write("Bad Request")
+    else:
+      self.response.write("This action is administrator only")
 
-class Task(db.Model):
-  title = db.StringProperty()
-  description = db.TextProperty()
-  added = db.DateTimeProperty(auto_now_add=True)
-  limit = db.DateTimeProperty()
-  active = db.BooleanProperty()
-
-class Address(db.Model):
-  address = db.EmailProperty()
 
 app = webapp2.WSGIApplication([
     (MailHandler.mapping()),
