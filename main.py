@@ -41,13 +41,13 @@ class MailHandler(InboundMailHandler):
       if hasattr(message, "subject"):
         subject = message.subject
       result = chandler.CommonHandler(False, message.to[:-26], subject.strip(), text.strip()).get_response() # Trim @easymtask.appspotmail.com
-
-      mail.EmailMessage (
-        sender = result["sender"] + "@easymtask.appspotmail.com",
-        to = message.sender,
-        subject = result["subject"],
-        html = result["body"]
-      ).send()
+      if not result["noReply"]:
+        mail.EmailMessage (
+          sender = result["sender"] + "@easymtask.appspotmail.com",
+          to = message.sender,
+          subject = result["subject"],
+          html = result["body"]
+        ).send()
 
 class HTTPHandler(webapp2.RequestHandler):
   def get(self):
@@ -69,7 +69,11 @@ class HTTPHandler(webapp2.RequestHandler):
         if self.request.path[5:] == "":
           self.redirect("/web/basic")
         else:
-          self.response.write(chandler.CommonHandler(True, self.request.path[5:], self.request.get("s").strip(), self.request.get("b").strip()).get_response()["body"]) # trim "/web/"
+          result = chandler.CommonHandler(True, self.request.path[5:], self.request.get("s").strip(), self.request.get("b").strip()).get_response() # Trim "/web/"
+          if result["noReply"]:
+            self.response.write("NO REPLY")
+          else:
+            self.response.write(result["body"])
     else:
       self.response.write("This action is administrator only")
 
