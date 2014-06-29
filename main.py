@@ -85,6 +85,7 @@ class AdminHandler(webapp2.RequestHandler):
           <p><input type="radio" name="method" value="add" checked>Add
           <input type="radio" name="method" value="remove">Remove</p>
           <p>Address: <input name="address" type="input" /></p>
+          <p>Cron: <input type="checkbox" name="cron" value="true"></p>
           <p><input type="submit" value="Submit" /></p>
         </form>
       """)
@@ -94,6 +95,7 @@ class AdminHandler(webapp2.RequestHandler):
     if users.is_current_user_admin():
       method = self.request.get("method")
       address = self.request.get("address")
+      cron = self.request.get("cron") == "true"
       if address == "":
         self.error(400)
         self.response.write("Bad Request")
@@ -101,7 +103,7 @@ class AdminHandler(webapp2.RequestHandler):
         if method == "add":
           q = model.Address.gql("WHERE address = :1", address)
           if q.count() == 0:
-            model.Address(address=address).put()
+            model.Address(address=address, cron=cron).put()
             self.response.write("Completed")
           else:
             self.response.write("Already registered")
@@ -116,10 +118,26 @@ class AdminHandler(webapp2.RequestHandler):
     else:
       self.response.write("This action is administrator only")
 
+class CronListHandler(webapp2.RequestHandler):
+  def get(self):
+    if users.is_current_user_admin():
+      q = model.Address.all()
+      for i in q:
+        if i.cron:
+        # send empty message (will return task list)
+          result = chandler.CommonHandler(False, "basic", "", "").get_response()
+          if not result["noReply"]:
+            mail.EmailMessage (
+              sender = result["sender"] + "@easymtask.appspotmail.com",
+              to = i.address,
+              subject = result["subject"],
+              html = result["body"]
+            ).send()
 
 app = webapp2.WSGIApplication([
     (MailHandler.mapping()),
     ('/', MainHandler),
     ('/web/.*', HTTPHandler),
-    ('/admin', AdminHandler)
+    ('/admin', AdminHandler),
+    ('/cron/list', CronListHandler)
 ], debug=True)

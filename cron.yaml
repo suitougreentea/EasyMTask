@@ -1,0 +1,8 @@
+cron:
+- description: list task
+  url: /cron/list
+  schedule: every day 22:00
+- description: list task
+  url: /cron/list
+  schedule: every day 10:30
+
