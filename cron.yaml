@@ -1,8 +1,8 @@
 cron:
-- description: list task
+- description: send task list in the morning
   url: /cron/list
   schedule: every day 22:00
-- description: list task
+- description: send task list at night
   url: /cron/list
   schedule: every day 10:30
 

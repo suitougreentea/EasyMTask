@@ -120,19 +120,18 @@ class AdminHandler(webapp2.RequestHandler):
 
 class CronListHandler(webapp2.RequestHandler):
   def get(self):
-    if users.is_current_user_admin():
-      q = model.Address.all()
-      for i in q:
-        if i.cron:
+    q = model.Address.all()
+    for i in q:
+      if i.cron:
         # send empty message (will return task list)
-          result = chandler.CommonHandler(False, "basic", "", "").get_response()
-          if not result["noReply"]:
-            mail.EmailMessage (
-              sender = result["sender"] + "@easymtask.appspotmail.com",
-              to = i.address,
-              subject = result["subject"],
-              html = result["body"]
-            ).send()
+        result = chandler.CommonHandler(False, "basic", "", "").get_response()
+        if not result["noReply"]:
+          mail.EmailMessage (
+            sender = result["sender"] + "@easymtask.appspotmail.com",
+            to = i.address,
+            subject = result["subject"],
+            html = result["body"]
+          ).send()
 
 app = webapp2.WSGIApplication([
     (MailHandler.mapping()),
